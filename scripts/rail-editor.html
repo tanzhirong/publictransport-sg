@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rail Line Segment Editor</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+
+  #map { width: 100vw; height: 100vh; }
+
+  /* Top bar */
+  #topbar {
+    position: absolute; top: 10px; left: 10px; right: 320px; z-index: 10;
+    display: flex; gap: 8px; align-items: center;
+  }
+  #topbar button, #topbar label, #topbar select {
+    background: white; border: 1px solid #ccc; border-radius: 6px;
+    padding: 8px 14px; font-size: 13px; cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  }
+  #topbar button:hover { background: #f0f0f0; }
+  #topbar select { padding: 7px 10px; }
+
+  /* Side panel */
+  #panel {
+    position: absolute; top: 10px; right: 10px; width: 300px; z-index: 10;
+    background: white; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+    padding: 16px; max-height: calc(100vh - 20px); overflow-y: auto;
+  }
+  #panel h2 { font-size: 16px; margin-bottom: 12px; color: #333; }
+  #panel h3 { font-size: 13px; margin: 12px 0 6px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  /* Selected segment info */
+  #selected-info {
+    background: #f8f8f8; border-radius: 6px; padding: 10px; margin-bottom: 12px;
+    font-size: 12px; color: #555; min-height: 40px;
+  }
+  #selected-info .label { font-weight: 600; color: #333; }
+  #selected-info .value { margin-left: 4px; }
+
+  /* Line buttons grid */
+  .line-buttons {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px;
+  }
+  .line-btn {
+    border: 2px solid transparent; border-radius: 6px; padding: 8px 6px;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    color: white; text-align: center; transition: all 0.15s;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+  }
+  .line-btn:hover { transform: scale(1.03); box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+  .line-btn.active { border-color: #000; box-shadow: 0 0 0 2px rgba(0,0,0,0.3); }
+  .line-btn.unassigned { background: #999; }
+
+  /* LRT sub-buttons */
+  .lrt-sub {
+    display: none; grid-template-columns: 1fr 1fr; gap: 4px;
+    margin-top: 4px; padding: 4px; background: #f0f0f0; border-radius: 4px;
+  }
+  .lrt-sub.show { display: grid; }
+  .lrt-sub button {
+    font-size: 10px; padding: 4px; border: 1px solid #aaa; border-radius: 4px;
+    cursor: pointer; background: white;
+  }
+  .lrt-sub button:hover { background: #e0e0e0; }
+
+  /* Stats */
+  .stats-table { width: 100%; font-size: 11px; border-collapse: collapse; }
+  .stats-table td { padding: 3px 6px; border-bottom: 1px solid #f0f0f0; }
+  .stats-table .line-dot {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px;
+  }
+  .stats-table .count { text-align: right; font-weight: 600; }
+
+  /* Change log */
+  #changelog {
+    font-size: 11px; max-height: 120px; overflow-y: auto;
+    background: #fafafa; border-radius: 4px; padding: 6px; margin-top: 8px;
+  }
+  #changelog div { padding: 2px 0; border-bottom: 1px solid #f0f0f0; color: #555; }
+
+  /* Action buttons */
+  .action-btns { display: flex; gap: 6px; margin-top: 12px; }
+  .action-btns button {
+    flex: 1; padding: 10px; border: none; border-radius: 6px;
+    font-size: 13px; font-weight: 600; cursor: pointer; transition: background 0.15s;
+  }
+  .btn-export { background: #4CAF50; color: white; }
+  .btn-export:hover { background: #43A047; }
+  .btn-undo { background: #FF9800; color: white; }
+  .btn-undo:hover { background: #F57C00; }
+  .btn-undo:disabled { background: #ccc; cursor: not-allowed; }
+
+  /* Loading overlay */
+  #loading {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 100;
+    background: rgba(255,255,255,0.9); display: flex; align-items: center;
+    justify-content: center; font-size: 18px; color: #666;
+  }
+  #loading.hidden { display: none; }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div id="topbar">
+  <button id="loadBtn" onclick="document.getElementById('fileInput').click()">Load GeoJSON</button>
+  <input type="file" id="fileInput" accept=".geojson,.json" style="display:none" onchange="loadFile(event)">
+  <label style="display:flex;align-items:center;gap:6px;">
+    <input type="checkbox" id="filterUnassigned" onchange="applyFilter()"> Show only UNASSIGNED
+  </label>
+  <select id="filterLine" onchange="applyFilter()">
+    <option value="">Show all lines</option>
+  </select>
+  <span id="segmentCount" style="background:white;padding:8px 14px;border-radius:6px;font-size:13px;box-shadow:0 1px 4px rgba(0,0,0,0.15);"></span>
+</div>
+
+<div id="panel">
+  <h2>Rail Line Editor</h2>
+
+  <div id="selected-info">
+    <em>Click a segment on the map to select it</em>
+  </div>
+
+  <h3>Assign to Line</h3>
+  <div class="line-buttons" id="lineButtons"></div>
+
+  <div id="slrtSub" class="lrt-sub">
+    <button onclick="assignLine('SLRT_EAST','#748477')">SLRT East</button>
+    <button onclick="assignLine('SLRT_WEST','#748477')">SLRT West</button>
+  </div>
+  <div id="plrtSub" class="lrt-sub">
+    <button onclick="assignLine('PLRT_EAST','#748477')">PLRT East</button>
+    <button onclick="assignLine('PLRT_WEST','#748477')">PLRT West</button>
+  </div>
+
+  <h3>Statistics</h3>
+  <table class="stats-table" id="statsTable"></table>
+
+  <h3>Changes (<span id="changeCount">0</span>)</h3>
+  <div id="changelog"><em>No changes yet</em></div>
+
+  <div class="action-btns">
+    <button class="btn-undo" id="undoBtn" disabled onclick="undo()">Undo</button>
+    <button class="btn-export" onclick="exportGeoJson()">Export GeoJSON</button>
+  </div>
+</div>
+
+<div id="loading">Load a GeoJSON file to begin editing</div>
+
+<script>
+// ============================================================
+// LINE DEFINITIONS
+// ============================================================
+const LINES = {
+  NSL:  { name: 'North-South', color: '#d42e12' },
+  EWL:  { name: 'East-West',   color: '#009645' },
+  CGL:  { name: 'Changi Ext',  color: '#009645' },
+  NEL:  { name: 'North East',  color: '#9900aa' },
+  CCL:  { name: 'Circle',      color: '#fa9e0d' },
+  CEL:  { name: 'Circle Ext',  color: '#fa9e0d' },
+  DTL:  { name: 'Downtown',    color: '#005ec4' },
+  TEL:  { name: 'Thomson-EC',  color: '#9D5B25' },
+  BPL:  { name: 'Bukit Panjang LRT', color: '#748477' },
+  SLRT: { name: 'Sengkang LRT', color: '#748477', hasSub: true },
+  PLRT: { name: 'Punggol LRT',  color: '#748477', hasSub: true },
+};
+
+const ALL_LINE_COLORS = {
+  NSL: '#d42e12', EWL: '#009645', CGL: '#009645', NEL: '#9900aa',
+  CCL: '#fa9e0d', CEL: '#fa9e0d', DTL: '#005ec4', TEL: '#9D5B25',
+  BPL: '#748477', SLRT_EAST: '#748477', SLRT_WEST: '#748477',
+  PLRT_EAST: '#748477', PLRT_WEST: '#748477', UNASSIGNED: '#999999',
+};
+
+// ============================================================
+// STATE
+// ============================================================
+let map, dataLayer, geojsonData;
+let selectedFeature = null;
+let changeHistory = []; // [{feature, oldLine, oldColor, newLine, newColor}]
+let activeFilter = null; // null = show all, or a line name
+
+// ============================================================
+// MAP INIT
+// ============================================================
+function initMap() {
+  map = new google.maps.Map(document.getElementById('map'), {
+    center: { lat: 1.3521, lng: 103.8198 },
+    zoom: 12,
+    streetViewControl: false,
+    mapTypeControl: false,
+    styles: [
+      { elementType: 'geometry', stylers: [{ color: '#f5f5f5' }] },
+      { elementType: 'labels.text.fill', stylers: [{ color: '#999' }] },
+      { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#fff' }] },
+      { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9c9c9' }] },
+      { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+      { featureType: 'poi', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+    ],
+  });
+
+  buildLineButtons();
+}
+
+// ============================================================
+// FILE LOADING
+// ============================================================
+function loadFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  document.getElementById('loading').textContent = 'Loading...';
+  document.getElementById('loading').classList.remove('hidden');
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    try {
+      geojsonData = JSON.parse(e.target.result);
+      renderGeoJson();
+      document.getElementById('loading').classList.add('hidden');
+      document.getElementById('loadBtn').textContent = `Loaded (${geojsonData.features.length} segments)`;
+      populateFilterDropdown();
+      updateStats();
+    } catch (err) {
+      alert('Error parsing GeoJSON: ' + err.message);
+      document.getElementById('loading').textContent = 'Load a GeoJSON file to begin editing';
+    }
+  };
+  reader.readAsText(file);
+}
+
+function renderGeoJson() {
+  if (dataLayer) {
+    dataLayer.setMap(null);
+  }
+
+  dataLayer = new google.maps.Data({ map });
+
+  dataLayer.addGeoJson(geojsonData);
+
+  dataLayer.setStyle((feature) => {
+    const color = feature.getProperty('color') || '#999';
+    const line = feature.getProperty('line');
+    const isSelected = feature === selectedFeature;
+    const isFiltered = activeFilter && line !== activeFilter;
+
+    return {
+      strokeColor: isSelected ? '#00FFFF' : color,
+      strokeWeight: isSelected ? 6 : (isFiltered ? 1 : 3),
+      strokeOpacity: isFiltered ? 0.15 : 0.85,
+      clickable: !isFiltered,
+      zIndex: isSelected ? 1000 : (isFiltered ? 1 : 50),
+    };
+  });
+
+  dataLayer.addListener('click', (event) => {
+    selectFeature(event.feature);
+  });
+
+  updateSegmentCount();
+}
+
+// ============================================================
+// SELECTION
+// ============================================================
+function selectFeature(feature) {
+  selectedFeature = feature;
+  dataLayer.setStyle(dataLayer.getStyle()); // Force re-style
+
+  const oid = feature.getProperty('OBJECTID');
+  const line = feature.getProperty('line');
+  const railType = feature.getProperty('RAIL_TYPE');
+  const grndLevel = feature.getProperty('GRND_LEVEL');
+
+  document.getElementById('selected-info').innerHTML = `
+    <div><span class="label">OBJECTID:</span><span class="value">${oid}</span></div>
+    <div><span class="label">Line:</span><span class="value" style="color:${ALL_LINE_COLORS[line] || '#999'};font-weight:700">${line}</span></div>
+    <div><span class="label">Rail Type:</span><span class="value">${railType}</span></div>
+    <div><span class="label">Level:</span><span class="value">${grndLevel}</span></div>
+  `;
+
+  // Highlight active line button
+  document.querySelectorAll('.line-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.line === line ||
+      (btn.dataset.line === 'SLRT' && (line === 'SLRT_EAST' || line === 'SLRT_WEST')) ||
+      (btn.dataset.line === 'PLRT' && (line === 'PLRT_EAST' || line === 'PLRT_WEST')));
+  });
+}
+
+// ============================================================
+// LINE ASSIGNMENT
+// ============================================================
+function assignLine(line, color) {
+  if (!selectedFeature) {
+    alert('Select a segment first by clicking on the map');
+    return;
+  }
+
+  const oldLine = selectedFeature.getProperty('line');
+  const oldColor = selectedFeature.getProperty('color');
+
+  if (oldLine === line) return; // No change
+
+  // Record change
+  changeHistory.push({
+    feature: selectedFeature,
+    objectId: selectedFeature.getProperty('OBJECTID'),
+    oldLine, oldColor, newLine: line, newColor: color,
+  });
+
+  // Apply change
+  selectedFeature.setProperty('line', line);
+  selectedFeature.setProperty('color', color);
+
+  // Also update the raw geojsonData for export
+  const oid = selectedFeature.getProperty('OBJECTID');
+  const feat = geojsonData.features.find(f => f.properties.OBJECTID === oid);
+  if (feat) {
+    feat.properties.line = line;
+    feat.properties.color = color;
+  }
+
+  // Re-style and update UI
+  dataLayer.setStyle(dataLayer.getStyle());
+  selectFeature(selectedFeature); // Refresh info panel
+  updateStats();
+  updateChangelog();
+  document.getElementById('undoBtn').disabled = false;
+}
+
+function assignLineFromButton(lineKey) {
+  // Handle LRT sub-menus
+  if (lineKey === 'SLRT') {
+    document.getElementById('slrtSub').classList.toggle('show');
+    document.getElementById('plrtSub').classList.remove('show');
+    return;
+  }
+  if (lineKey === 'PLRT') {
+    document.getElementById('plrtSub').classList.toggle('show');
+    document.getElementById('slrtSub').classList.remove('show');
+    return;
+  }
+
+  document.getElementById('slrtSub').classList.remove('show');
+  document.getElementById('plrtSub').classList.remove('show');
+
+  const color = ALL_LINE_COLORS[lineKey] || '#999999';
+  assignLine(lineKey, color);
+}
+
+// ============================================================
+// UNDO
+// ============================================================
+function undo() {
+  if (changeHistory.length === 0) return;
+
+  const last = changeHistory.pop();
+  last.feature.setProperty('line', last.oldLine);
+  last.feature.setProperty('color', last.oldColor);
+
+  // Also revert in raw data
+  const feat = geojsonData.features.find(f => f.properties.OBJECTID === last.objectId);
+  if (feat) {
+    feat.properties.line = last.oldLine;
+    feat.properties.color = last.oldColor;
+  }
+
+  dataLayer.setStyle(dataLayer.getStyle());
+  if (selectedFeature === last.feature) selectFeature(last.feature);
+  updateStats();
+  updateChangelog();
+  document.getElementById('undoBtn').disabled = changeHistory.length === 0;
+}
+
+// ============================================================
+// FILTERING
+// ============================================================
+function applyFilter() {
+  const unassignedOnly = document.getElementById('filterUnassigned').checked;
+  const lineFilter = document.getElementById('filterLine').value;
+
+  if (unassignedOnly) {
+    activeFilter = 'UNASSIGNED';
+    document.getElementById('filterLine').value = '';
+  } else if (lineFilter) {
+    activeFilter = lineFilter;
+    document.getElementById('filterUnassigned').checked = false;
+  } else {
+    activeFilter = null;
+  }
+
+  if (dataLayer) {
+    dataLayer.setStyle(dataLayer.getStyle());
+  }
+  updateSegmentCount();
+}
+
+function populateFilterDropdown() {
+  const select = document.getElementById('filterLine');
+  // Clear existing options except first
+  while (select.options.length > 1) select.remove(1);
+
+  const lines = new Set();
+  geojsonData.features.forEach(f => lines.add(f.properties.line));
+
+  Array.from(lines).sort().forEach(line => {
+    const opt = document.createElement('option');
+    opt.value = line;
+    opt.textContent = line;
+    select.appendChild(opt);
+  });
+}
+
+function updateSegmentCount() {
+  if (!geojsonData) return;
+  const total = geojsonData.features.length;
+  const visible = activeFilter
+    ? geojsonData.features.filter(f => f.properties.line === activeFilter).length
+    : total;
+  document.getElementById('segmentCount').textContent =
+    activeFilter ? `${visible} / ${total} segments` : `${total} segments`;
+}
+
+// ============================================================
+// UI BUILDERS
+// ============================================================
+function buildLineButtons() {
+  const container = document.getElementById('lineButtons');
+
+  // Main line buttons
+  Object.entries(LINES).forEach(([key, info]) => {
+    const btn = document.createElement('button');
+    btn.className = 'line-btn';
+    btn.dataset.line = key;
+    btn.style.background = info.color;
+    btn.textContent = `${key} - ${info.name}`;
+    btn.onclick = () => assignLineFromButton(key);
+    container.appendChild(btn);
+  });
+
+  // UNASSIGNED button
+  const unBtn = document.createElement('button');
+  unBtn.className = 'line-btn unassigned';
+  unBtn.dataset.line = 'UNASSIGNED';
+  unBtn.textContent = 'UNASSIGNED';
+  unBtn.onclick = () => assignLine('UNASSIGNED', '#999999');
+  container.appendChild(unBtn);
+}
+
+function updateStats() {
+  if (!geojsonData) return;
+
+  const counts = {};
+  geojsonData.features.forEach(f => {
+    const line = f.properties.line;
+    counts[line] = (counts[line] || 0) + 1;
+  });
+
+  const table = document.getElementById('statsTable');
+  table.innerHTML = '';
+
+  // Sort: UNASSIGNED first, then by count descending
+  const sorted = Object.entries(counts).sort((a, b) => {
+    if (a[0] === 'UNASSIGNED') return -1;
+    if (b[0] === 'UNASSIGNED') return 1;
+    return b[1] - a[1];
+  });
+
+  sorted.forEach(([line, count]) => {
+    const color = ALL_LINE_COLORS[line] || '#999';
+    const row = table.insertRow();
+    row.innerHTML = `
+      <td><span class="line-dot" style="background:${color}"></span>${line}</td>
+      <td class="count">${count}</td>
+    `;
+    row.style.cursor = 'pointer';
+    row.onclick = () => {
+      document.getElementById('filterLine').value = line;
+      document.getElementById('filterUnassigned').checked = false;
+      applyFilter();
+    };
+  });
+}
+
+function updateChangelog() {
+  const el = document.getElementById('changelog');
+  document.getElementById('changeCount').textContent = changeHistory.length;
+
+  if (changeHistory.length === 0) {
+    el.innerHTML = '<em>No changes yet</em>';
+    return;
+  }
+
+  el.innerHTML = changeHistory.slice().reverse().map((c, i) => {
+    const idx = changeHistory.length - i;
+    return `<div>#${idx}: OID ${c.objectId}: ${c.oldLine} → ${c.newLine}</div>`;
+  }).join('');
+}
+
+// ============================================================
+// EXPORT
+// ============================================================
+function exportGeoJson() {
+  if (!geojsonData) {
+    alert('No GeoJSON loaded');
+    return;
+  }
+
+  const json = JSON.stringify(geojsonData);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'railLines.geojson';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+</script>
+
+<script async defer
+  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCB98cEjvQSHnNbaZgWiHsfhvFqhuc2gNc&callback=initMap">
+</script>
+
+</body>
+</html>
