@@ -557,8 +557,20 @@ function exportGeoJson() {
 }
 </script>
 
-<script async defer
-  src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCB98cEjvQSHnNbaZgWiHsfhvFqhuc2gNc&callback=initMap">
+<script>
+  // Load Google Maps with key from localStorage (dev tool only)
+  (function() {
+    var key = localStorage.getItem('gmaps_api_key');
+    if (!key) {
+      key = prompt('Enter your Google Maps API key (saved to localStorage for this session):');
+      if (!key) { document.body.innerHTML = '<p style="padding:20px;font-family:sans-serif">No API key provided. Refresh to try again.</p>'; return; }
+      localStorage.setItem('gmaps_api_key', key);
+    }
+    var s = document.createElement('script');
+    s.async = true; s.defer = true;
+    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + key + '&callback=initMap';
+    document.head.appendChild(s);
+  })();
 </script>
 
 </body>
