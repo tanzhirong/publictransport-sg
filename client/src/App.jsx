@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import MapView from './components/MapView';
 import FilterPanel from './components/FilterPanel';
+import BusRouteSearch from './components/BusRouteSearch';
 import DelayBanner from './components/DelayBanner';
 import DelayToast from './components/DelayToast';
+import { useBusRouteData } from './hooks/useBusRouteData';
 import './App.css';
 
 const ALERT_POLL_INTERVAL = 2 * 60 * 1000; // 2 minutes
@@ -12,6 +14,16 @@ export default function App() {
   const [activeLayer, setActiveLayer] = useState('mrt');
   const showMRT = activeLayer === 'mrt';
   const showBus = activeLayer === 'bus';
+
+  // Bus route data + selection
+  const { busRoutes } = useBusRouteData();
+  const [selectedRoute, setSelectedRoute] = useState(null);
+
+  // Clear selected route when switching away from bus layer
+  const handleSetLayer = useCallback((layer) => {
+    setActiveLayer(layer);
+    if (layer !== 'bus') setSelectedRoute(null);
+  }, []);
 
   // Delay alert state
   const [alerts, setAlerts] = useState(null);
@@ -71,10 +83,21 @@ export default function App() {
 
       <FilterPanel
         activeLayer={activeLayer}
-        onSetLayer={setActiveLayer}
+        onSetLayer={handleSetLayer}
         onSampleDelay={handleSampleDelay}
       />
-      <MapView showBus={showBus} showMRT={showMRT} />
+      <BusRouteSearch
+        busRoutes={busRoutes}
+        onRouteSelect={setSelectedRoute}
+        visible={showBus}
+      />
+      <MapView
+        showBus={showBus}
+        showMRT={showMRT}
+        selectedRoute={selectedRoute}
+        onRouteSelect={setSelectedRoute}
+        busRoutes={busRoutes}
+      />
     </div>
   );
 }

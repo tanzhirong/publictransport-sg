@@ -51,7 +51,14 @@ export default function BusArrivalInfo({ busStopCode, data, loading, error }) {
           <tbody>
             {data.Services.map((svc) => (
               <tr key={svc.ServiceNo} style={{ borderBottom: '1px solid #eee' }}>
-                <td style={{ padding: '3px 6px', fontWeight: 600 }}>{svc.ServiceNo}</td>
+                <td
+                  style={{ padding: '3px 6px', fontWeight: 600, color: '#1565C0', cursor: 'pointer' }}
+                  className="bus-service-clickable"
+                  data-service-no={svc.ServiceNo}
+                  data-bus-stop={busStopCode}
+                >
+                  {svc.ServiceNo}
+                </td>
                 {['NextBus', 'NextBus2', 'NextBus3'].map((key) => (
                   <td key={key} style={{ padding: '3px 6px' }}>
                     {formatArrival(svc[key]?.EstimatedArrival)}

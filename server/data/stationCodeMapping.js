@@ -161,6 +161,15 @@ const stationCodeMapping = {
   "SIGLAP MRT STATION": [{ code: "TE28", line: "TEL" }],
   "BAYSHORE MRT STATION": [{ code: "TE29", line: "TEL" }],
 
+  // Sentosa Express (Sentosa LRT monorail — operational but not on LTA PCDRealTime API)
+  "BEACH": [],
+  "IMBIAH": [],
+  "RESORTS WORLD": [],
+
+  // Recently opened stations whose GeoJSON polygon name has no "MRT STATION" suffix
+  // Adding these prevents them from being incorrectly labelled "(Planned)" on the footprint layer
+  "PUNGGOL COAST": [],   // TEL extension — opened but not yet on PCDRealTime API
+
   // BPL - Bukit Panjang LRT (non-interchange stations only)
   "CHOA CHU KANG LRT STATION": [{ code: "BP1", line: "BPL" }],
   "SOUTH VIEW LRT STATION": [{ code: "BP2", line: "BPL" }],

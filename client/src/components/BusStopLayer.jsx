@@ -6,7 +6,7 @@ import { getBusStopIcon } from '../utils/icons';
 // - At low zoom: cluster bubbles showing count per region
 // - At high zoom: individual red dot markers
 
-export default function BusStopLayer({ map, busStops, visible, onBusStopClick }) {
+export default function BusStopLayer({ map, busStops, visible, onBusStopClick, selectedRoute }) {
   const markersRef = useRef([]);
   const clustererRef = useRef(null);
 
@@ -53,17 +53,16 @@ export default function BusStopLayer({ map, busStops, visible, onBusStopClick })
     };
   }, [map, busStops]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Toggle visibility
+  // Toggle visibility — hide when not visible OR when a route is selected
   useEffect(() => {
     if (!clustererRef.current) return;
-    if (visible) {
+    if (visible && !selectedRoute) {
       clustererRef.current.setMap(map);
     } else {
       clustererRef.current.setMap(null);
-      // Also hide individual markers that may be outside clusters
       markersRef.current.forEach((m) => m.setMap(null));
     }
-  }, [visible, map]);
+  }, [visible, map, selectedRoute]);
 
   return null;
 }

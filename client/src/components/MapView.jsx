@@ -6,6 +6,7 @@ import MRTExitLayer from './MRTExitLayer';
 import MRTLineLayer from './MRTLineLayer';
 import MRTStationLayer from './MRTStationLayer';
 import StationFootprintLayer from './StationFootprintLayer';
+import BusRouteLayer from './BusRouteLayer';
 import BusArrivalInfo from './BusArrivalInfo';
 import MRTCrowdInfo from './MRTCrowdInfo';
 import { useBusArrival } from '../hooks/useBusArrival';
@@ -59,7 +60,7 @@ const mapOptions = {
   styles: GREY_MAP_STYLES,
 };
 
-export default function MapView({ showBus, showMRT }) {
+export default function MapView({ showBus, showMRT, selectedRoute, onRouteSelect, busRoutes }) {
   const { isLoaded, loadError } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
   });
@@ -140,9 +141,9 @@ export default function MapView({ showBus, showMRT }) {
     });
   }, []);
 
-  // Lazy-load bus stops on first showBus=true
+  // Lazy-load bus stops on first showBus=true OR when a route is selected
   useEffect(() => {
-    if (!showBus || busStopsLoadedRef.current) return;
+    if ((!showBus && !selectedRoute) || busStopsLoadedRef.current) return;
     busStopsLoadedRef.current = true;
 
     fetch('/data/busStops.geojson')
@@ -155,7 +156,16 @@ export default function MapView({ showBus, showMRT }) {
         }));
         setBusStops(stops);
       });
-  }, [showBus]);
+  }, [showBus, selectedRoute]);
+
+  // Build stopCode → { lat, lng } lookup map for route polyline rendering
+  const busStopMap = useMemo(() => {
+    const m = new Map();
+    for (const stop of busStops) {
+      m.set(stop.id, { lat: stop.lat, lng: stop.lng });
+    }
+    return m;
+  }, [busStops]);
 
   // Pre-fetch all crowd data on mount + refresh every 10 min
   useEffect(() => {
@@ -176,8 +186,9 @@ export default function MapView({ showBus, showMRT }) {
     if (!isLoaded) return;
     const iw = new window.google.maps.InfoWindow({ disableAutoPan: true });
 
-    // Attach domready listener to wire up "More Details" toggle
+    // Attach domready listener to wire up "More Details" toggle + bus service clicks
     iw.addListener('domready', () => {
+      // MRT "More Details" toggle
       const toggle = document.getElementById('mrt-details-toggle');
       const content = document.getElementById('mrt-details-content');
       if (toggle && content) {
@@ -187,6 +198,18 @@ export default function MapView({ showBus, showMRT }) {
           toggle.textContent = isHidden ? 'Less Details ▲' : 'More Details ▼';
         };
       }
+
+      // Bus service number clicks → show route
+      const serviceEls = document.querySelectorAll('[data-service-no]');
+      serviceEls.forEach((el) => {
+        el.onclick = () => {
+          const svcNo = el.getAttribute('data-service-no');
+          const stopCode = el.getAttribute('data-bus-stop');
+          if (handleServiceClickRef.current) {
+            handleServiceClickRef.current(svcNo, stopCode);
+          }
+        };
+      });
     });
 
     infoWindowRef.current = iw;
@@ -259,6 +282,33 @@ export default function MapView({ showBus, showMRT }) {
     );
   }, [stationMapping, allCrowdData, trainSchedule]);
 
+  // Handle service number click from bus arrival popup → show route
+  const handleServiceClick = useCallback((serviceNo, busStopCode) => {
+    if (!busRoutes) return;
+    const candidates = Object.keys(busRoutes).filter(
+      (k) => k.split(' (')[0] === serviceNo
+    );
+    if (candidates.length === 0) return;
+
+    // Pick direction whose stop list contains this bus stop
+    let selected = candidates[0];
+    for (const key of candidates) {
+      if (busRoutes[key].includes(busStopCode)) {
+        selected = key;
+        break;
+      }
+    }
+
+    if (onRouteSelect) onRouteSelect(selected);
+    if (infoWindowRef.current) infoWindowRef.current.close();
+  }, [busRoutes, onRouteSelect]);
+
+  // Keep a ref so the domready closure can always call the latest version
+  const handleServiceClickRef = useRef(handleServiceClick);
+  useEffect(() => {
+    handleServiceClickRef.current = handleServiceClick;
+  }, [handleServiceClick]);
+
   // Bus stop click handler
   const handleBusStopClick = useCallback((stop, marker) => {
     setSelectedBusStop(stop);
@@ -321,11 +371,12 @@ export default function MapView({ showBus, showMRT }) {
           busStops={busStops}
           visible={showBus}
           onBusStopClick={handleBusStopClick}
+          selectedRoute={selectedRoute}
         />
       )}
 
-      {/* MRT Line paths — only mount when MRT layer is active */}
-      {map && showMRT && (
+      {/* MRT Line paths — always mounted once map is ready, visibility toggled via prop */}
+      {map && (
         <MRTLineLayer
           map={map}
           visible={showMRT}
@@ -364,6 +415,18 @@ export default function MapView({ showBus, showMRT }) {
           map={map}
           mrtExits={mrtExits}
           visible={showMRT && isExitZoomedIn}
+        />
+      )}
+
+      {/* Bus route polyline + live bus markers */}
+      {map && selectedRoute && busRoutes?.[selectedRoute] && busStopMap.size > 0 && (
+        <BusRouteLayer
+          map={map}
+          routeKey={selectedRoute}
+          routeStops={busRoutes[selectedRoute]}
+          busStopMap={busStopMap}
+          onClear={() => onRouteSelect(null)}
+          onBusStopClick={handleBusStopClick}
         />
       )}
     </GoogleMap>
