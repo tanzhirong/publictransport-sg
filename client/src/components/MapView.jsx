@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { GoogleMap, useLoadScript } from '@react-google-maps/api';
 import ReactDOMServer from 'react-dom/server';
+import { apiUrl } from '../utils/api';
 import BusStopLayer from './BusStopLayer';
 import MRTExitLayer from './MRTExitLayer';
 import MRTLineLayer from './MRTLineLayer';
@@ -107,7 +108,7 @@ export default function MapView({ showBus, showMRT, selectedRoute, onRouteSelect
   useEffect(() => {
     Promise.all([
       fetch('/data/mrtExits.geojson').then((r) => r.json()),
-      fetch('/api/mrt-crowd/station-mapping').then((r) => r.json()),
+      fetch(apiUrl('/api/mrt-crowd/station-mapping')).then((r) => r.json()),
       fetch('/data/trainSchedule.json').then((r) => r.json()).catch(() => ({})),
     ]).then(([mrtGeo, mapping, schedule]) => {
       const exits = mrtGeo.features.map((f) => ({
@@ -146,14 +147,10 @@ export default function MapView({ showBus, showMRT, selectedRoute, onRouteSelect
     if ((!showBus && !selectedRoute) || busStopsLoadedRef.current) return;
     busStopsLoadedRef.current = true;
 
-    fetch('/data/busStops.geojson')
+    // busStops.json is pre-slimmed to [{id, lat, lng}] — 87% smaller than the original geojson
+    fetch('/data/busStops.json')
       .then((r) => r.json())
-      .then((busGeo) => {
-        const stops = busGeo.features.map((f) => ({
-          id: f.properties.BUS_STOP_NUM,
-          lat: f.geometry.coordinates[1],
-          lng: f.geometry.coordinates[0]
-        }));
+      .then((stops) => {
         setBusStops(stops);
       });
   }, [showBus, selectedRoute]);
@@ -170,7 +167,7 @@ export default function MapView({ showBus, showMRT, selectedRoute, onRouteSelect
   // Pre-fetch all crowd data on mount + refresh every 10 min
   useEffect(() => {
     function fetchCrowd() {
-      fetch('/api/mrt-crowd/all')
+      fetch(apiUrl('/api/mrt-crowd/all'))
         .then((r) => r.json())
         .then((data) => setAllCrowdData(data.stations || {}))
         .catch((err) => console.error('[MapView] Failed to fetch crowd data:', err));
@@ -372,6 +369,7 @@ export default function MapView({ showBus, showMRT, selectedRoute, onRouteSelect
           visible={showBus}
           onBusStopClick={handleBusStopClick}
           selectedRoute={selectedRoute}
+          zoomLevel={zoomLevel}
         />
       )}
 

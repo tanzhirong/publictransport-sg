@@ -1,0 +1,25 @@
+# Fly.io configuration for the Express backend (API only)
+# Frontend is deployed separately to Vercel.
+#
+# First-time setup:
+#   fly launch --no-deploy   ← updates app name below
+#   fly secrets set LTA_API_KEY=xxx NODE_ENV=production SERVE_STATIC=false \
+#     ALLOWED_ORIGINS=https://your-app.vercel.app
+#   fly deploy
+
+app = 'publictransport-sg-api'
+primary_region = 'sin'
+
+[build]
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_stop_machines = 'off'
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  memory = '256mb'
+  cpu_kind = 'shared'
+  cpus = 1

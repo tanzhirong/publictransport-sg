@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { apiUrl } from '../utils/api';
 
 export function useBusArrival() {
   const [data, setData] = useState(null);
@@ -10,7 +11,7 @@ export function useBusArrival() {
     setError(null);
     setData(null);
     try {
-      const res = await fetch(`/api/bus-arrival/${busStopCode}`);
+      const res = await fetch(apiUrl(`/api/bus-arrival/${busStopCode}`));
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setData(json);

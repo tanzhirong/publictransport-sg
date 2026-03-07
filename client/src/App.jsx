@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { apiUrl } from './utils/api';
 import MapView from './components/MapView';
 import FilterPanel from './components/FilterPanel';
 import BusRouteSearch from './components/BusRouteSearch';
@@ -33,7 +34,7 @@ export default function App() {
   // Poll for train alerts every 2 minutes
   useEffect(() => {
     function fetchAlerts() {
-      fetch('/api/train-alerts')
+      fetch(apiUrl('/api/train-alerts'))
         .then((r) => r.json())
         .then((data) => {
           setAlerts(data);
@@ -53,7 +54,7 @@ export default function App() {
 
   // Sample delay button handler
   const handleSampleDelay = useCallback(() => {
-    fetch('/api/train-alerts/sample')
+    fetch(apiUrl('/api/train-alerts/sample'))
       .then((r) => r.json())
       .then((data) => {
         setAlerts(data);

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { getBusIcon, getBusStopIcon } from '../utils/icons';
+import { apiUrl } from '../utils/api';
 
 const ROUTE_COLOR = '#1565C0';  // Material Blue 800
 const BUS_REFRESH_MS = 30000;   // 30-second refresh
@@ -116,7 +117,7 @@ export default function BusRouteLayer({ map, routeKey, routeStops, busStopMap, o
     try {
       const responses = await Promise.allSettled(
         sampled.map((code) =>
-          fetch(`/api/bus-arrival/${code}`).then((r) => {
+          fetch(apiUrl(`/api/bus-arrival/${code}`)).then((r) => {
             if (!r.ok) throw new Error(`HTTP ${r.status}`);
             return r.json();
           })
