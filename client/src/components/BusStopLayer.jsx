@@ -4,22 +4,26 @@ import { getBusStopIcon } from '../utils/icons';
 
 // Renders bus stops with MarkerClusterer:
 // - At low zoom: cluster bubbles showing count per region
-// - At high zoom: individual red dot markers
+// - At high zoom: individual red bus icons
 
 // Click is only meaningful when individual stops are visible (zoom >= this threshold)
 const CLICK_ZOOM_THRESHOLD = 14;
 
-// Module-level icon cache — created once after Google Maps API loads, reused across all
-// mounts. Sharing a single object reference lets the Maps API batch all 5,000+ stops
-// into one canvas draw call (optimized: true) instead of drawing each individually.
-let _cachedStopIcon = null;
-function getStopIcon() {
-  if (!_cachedStopIcon) _cachedStopIcon = getBusStopIcon();
-  return _cachedStopIcon;
-}
+// Icon switches to full size above this zoom; smaller below to avoid clutter
+const ICON_ZOOM_THRESHOLD = 15;
+const ICON_SIZE_SMALL  = 13;  // px — zoomed out (stops clustered, icon rarely seen)
+const ICON_SIZE_NORMAL = 20;  // px — zoomed in  (individual stops clearly visible)
+
+// Module-level icon cache — two sizes created once, reused forever.
+// Sharing a single object reference per size lets the Maps API batch all 5,000+
+// markers into one canvas draw call (optimized: true).
+let _iconSmall  = null;
+let _iconNormal = null;
+function getSmallIcon()  { if (!_iconSmall)  _iconSmall  = getBusStopIcon(ICON_SIZE_SMALL);  return _iconSmall;  }
+function getNormalIcon() { if (!_iconNormal) _iconNormal = getBusStopIcon(ICON_SIZE_NORMAL); return _iconNormal; }
 
 export default function BusStopLayer({ map, busStops, visible, onBusStopClick, selectedRoute, zoomLevel }) {
-  const markersRef = useRef([]);
+  const markersRef  = useRef([]);
   const clustererRef = useRef(null);
 
   // Keep click handler ref so listeners never hold stale closures
@@ -30,12 +34,13 @@ export default function BusStopLayer({ map, busStops, visible, onBusStopClick, s
   useEffect(() => {
     if (!map || !busStops || busStops.length === 0) return;
 
-    const stopIcon = getStopIcon();
+    // Start with small icon; the zoom effect below immediately corrects it if needed
+    const initialIcon = getNormalIcon();
 
     const markers = busStops.map((stop) => {
       const marker = new window.google.maps.Marker({
         position: { lat: stop.lat, lng: stop.lng },
-        icon: stopIcon,
+        icon: initialIcon,
         // No `title` — unique per-marker titles prevent the Maps API from batching
         // markers into a single canvas draw call, causing significant render overhead.
         optimized: true,  // Canvas rendering: all stops drawn in one batched pass
@@ -59,14 +64,13 @@ export default function BusStopLayer({ map, busStops, visible, onBusStopClick, s
     clustererRef.current = clusterer;
 
     return () => {
-      // Clean up markers and clusterer
       markers.forEach((m) => {
         window.google.maps.event.clearListeners(m, 'click');
         m.setMap(null);
       });
       clusterer.clearMarkers();
       clusterer.setMap(null);
-      markersRef.current = [];
+      markersRef.current  = [];
       clustererRef.current = null;
     };
   }, [map, busStops]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -82,14 +86,15 @@ export default function BusStopLayer({ map, busStops, visible, onBusStopClick, s
     }
   }, [visible, map, selectedRoute]);
 
-  // Fix 4: Toggle clickability based on zoom level.
-  // Below CLICK_ZOOM_THRESHOLD individual stops are clustered so clicks aren't
-  // meaningful. Marking them non-clickable removes them from the Maps API's
-  // hit-test pass on every mouse move — reduces per-frame CPU cost while panning.
+  // Zoom-driven updates: clickability + icon size
+  // Below CLICK_ZOOM_THRESHOLD — stops are clustered, clicks aren't meaningful.
+  // Marking non-clickable removes them from the Maps API hit-test on every mouse
+  // move, reducing per-frame CPU cost while panning at low zoom.
   useEffect(() => {
     if (markersRef.current.length === 0) return;
-    const shouldBeClickable = zoomLevel >= CLICK_ZOOM_THRESHOLD;
-    markersRef.current.forEach((m) => m.setOptions({ clickable: shouldBeClickable }));
+    const clickable = zoomLevel >= CLICK_ZOOM_THRESHOLD;
+    const icon      = zoomLevel >= ICON_ZOOM_THRESHOLD ? getNormalIcon() : getSmallIcon();
+    markersRef.current.forEach((m) => m.setOptions({ clickable, icon }));
   }, [zoomLevel]);
 
   return null;

@@ -7,13 +7,24 @@ const BUS_REFRESH_MS = 30000;   // 30-second refresh
 const SAMPLE_STOPS = 5;         // Number of stops to query for bus positions
 const DEDUP_DISTANCE_M = 100;   // Dedup threshold in metres
 
+// Icon sizing: small while route is selected + zoomed out; full size when zoomed in
+const ICON_ZOOM_THRESHOLD = 15; // Match BusStopLayer threshold
+const ICON_SIZE_SMALL  = 10;    // px — 50% of normal
+const ICON_SIZE_NORMAL = 20;    // px — same as BusStopLayer normal
+
+// Module-level cache — one object per size, created once, shared across re-renders
+let _routeIconSmall  = null;
+let _routeIconNormal = null;
+function getRouteSmallIcon()  { if (!_routeIconSmall)  _routeIconSmall  = getBusStopIcon(ICON_SIZE_SMALL);  return _routeIconSmall; }
+function getRouteNormalIcon() { if (!_routeIconNormal) _routeIconNormal = getBusStopIcon(ICON_SIZE_NORMAL); return _routeIconNormal; }
+
 /**
  * Renders:
  *  1. A polyline connecting all stops on the selected bus route
  *  2. Live bus position markers (from LTA API GPS data)
  *  3. A bottom-center badge with the route name + close button
  */
-export default function BusRouteLayer({ map, routeKey, routeStops, busStopMap, onClear, onBusStopClick }) {
+export default function BusRouteLayer({ map, routeKey, routeStops, busStopMap, onClear, onBusStopClick, zoomLevel }) {
   const polylineRef = useRef(null);
   const stopMarkersRef = useRef([]);
   const busMarkersRef = useRef([]);
@@ -68,8 +79,9 @@ export default function BusRouteLayer({ map, routeKey, routeStops, busStopMap, o
 
     polylineRef.current = polyline;
 
-    // Route stop markers (small red dots — same as bus stops but for this route only)
-    const stopIcon = getBusStopIcon();
+    // Route stop markers — start small; the zoom effect below immediately corrects
+    // if the map is already zoomed in past the threshold.
+    const stopIcon = getRouteSmallIcon();
     const stopMarkers = resolvedStops.map(({ code, lat, lng }) => {
       const marker = new window.google.maps.Marker({
         position: { lat, lng },
@@ -208,6 +220,15 @@ export default function BusRouteLayer({ map, routeKey, routeStops, busStopMap, o
       if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
     };
   }, []);
+
+  // ── Zoom-driven icon size for route stop markers ──────────
+  // Small (10 px) while zoomed out; full size (20 px) when zoomed in past threshold.
+  // Keeps parity with BusStopLayer's zoom behaviour.
+  useEffect(() => {
+    if (stopMarkersRef.current.length === 0) return;
+    const icon = zoomLevel >= ICON_ZOOM_THRESHOLD ? getRouteNormalIcon() : getRouteSmallIcon();
+    stopMarkersRef.current.forEach((m) => m.setOptions({ icon }));
+  }, [zoomLevel]);
 
   // ── Route badge (rendered as a portal-style DOM element) ──
   return (

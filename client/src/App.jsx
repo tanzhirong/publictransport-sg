@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { apiUrl } from './utils/api';
 import MapView from './components/MapView';
 import FilterPanel from './components/FilterPanel';
 import BusRouteSearch from './components/BusRouteSearch';
+import AddressSearch from './components/AddressSearch';
 import DelayBanner from './components/DelayBanner';
 import DelayToast from './components/DelayToast';
 import { useBusRouteData } from './hooks/useBusRouteData';
@@ -24,6 +25,23 @@ export default function App() {
   const handleSetLayer = useCallback((layer) => {
     setActiveLayer(layer);
     if (layer !== 'bus') setSelectedRoute(null);
+  }, []);
+
+  // Address search: map instance ref + selected address state
+  const mapRef = useRef(null);
+  const [selectedAddress, setSelectedAddress] = useState(null);
+
+  const handleAddressSelect = useCallback((lat, lng, label) => {
+    if (lat == null) {
+      // Cleared — remove pin
+      setSelectedAddress(null);
+      return;
+    }
+    setSelectedAddress({ lat, lng, label });
+    if (mapRef.current) {
+      mapRef.current.panTo({ lat, lng });
+      mapRef.current.setZoom(17);
+    }
   }, []);
 
   // Delay alert state
@@ -87,17 +105,29 @@ export default function App() {
         onSetLayer={handleSetLayer}
         onSampleDelay={handleSampleDelay}
       />
+
+      {/* Bus route search — top-left, Bus mode only */}
       <BusRouteSearch
         busRoutes={busRoutes}
         onRouteSelect={setSelectedRoute}
         visible={showBus}
       />
+
+      {/* Address / place search — top-left, both modes.
+          offsetTop shifts it down in Bus mode so it clears BusRouteSearch. */}
+      <AddressSearch
+        onSelect={handleAddressSelect}
+        offsetTop={showBus}
+      />
+
       <MapView
         showBus={showBus}
         showMRT={showMRT}
         selectedRoute={selectedRoute}
         onRouteSelect={setSelectedRoute}
         busRoutes={busRoutes}
+        onMapReady={(m) => { mapRef.current = m; }}
+        selectedAddress={selectedAddress}
       />
     </div>
   );

@@ -1,14 +1,25 @@
 // SVG symbol definitions for map markers
 // These must be called after Google Maps JS API is loaded
 
-export function getBusStopIcon() {
+export function getBusStopIcon(size = 20) {
+  // Red rounded-square with a white bus silhouette (side view).
+  // `size` controls the rendered pixel dimensions — call with a smaller value
+  // when zoomed out so the icons don't dominate the map.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 26 26">
+    <rect width="26" height="26" rx="6" fill="#E53935"/>
+    <rect x="3.5" y="7" width="19" height="10" rx="2" fill="white"/>
+    <rect x="5" y="8.5" width="6.5" height="4" rx="0.8" fill="#E53935"/>
+    <rect x="14.5" y="8.5" width="4.5" height="4" rx="0.8" fill="#E53935"/>
+    <line x1="13" y1="8.5" x2="13" y2="12.5" stroke="#E53935" stroke-width="1"/>
+    <circle cx="8" cy="19" r="2.5" fill="white"/>
+    <circle cx="8" cy="19" r="1.2" fill="#E53935"/>
+    <circle cx="18" cy="19" r="2.5" fill="white"/>
+    <circle cx="18" cy="19" r="1.2" fill="#E53935"/>
+  </svg>`;
   return {
-    path: window.google.maps.SymbolPath.CIRCLE,
-    fillColor: '#E53935',   // Red — high contrast on grey map
-    fillOpacity: 0.9,
-    strokeColor: '#B71C1C', // Dark red border
-    strokeWeight: 1,
-    scale: 5,               // ← BUS STOP DOT SIZE
+    url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+    scaledSize: new window.google.maps.Size(size, size),
+    anchor: new window.google.maps.Point(size / 2, size / 2),
   };
 }
 

@@ -8,6 +8,7 @@ import MRTLineLayer from './MRTLineLayer';
 import MRTStationLayer from './MRTStationLayer';
 import StationFootprintLayer from './StationFootprintLayer';
 import BusRouteLayer from './BusRouteLayer';
+import UserLocationLayer from './UserLocationLayer';
 import BusArrivalInfo from './BusArrivalInfo';
 import MRTCrowdInfo from './MRTCrowdInfo';
 import { useBusArrival } from '../hooks/useBusArrival';
@@ -61,7 +62,10 @@ const mapOptions = {
   styles: GREY_MAP_STYLES,
 };
 
-export default function MapView({ showBus, showMRT, selectedRoute, onRouteSelect, busRoutes }) {
+export default function MapView({
+  showBus, showMRT, selectedRoute, onRouteSelect, busRoutes,
+  onMapReady, selectedAddress,
+}) {
   const { isLoaded, loadError } = useLoadScript({
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY
   });
@@ -88,6 +92,9 @@ export default function MapView({ showBus, showMRT, selectedRoute, onRouteSelect
   // Bus arrival state
   const { data: busData, loading: busLoading, error: busError, fetchArrival } = useBusArrival();
   const [selectedBusStop, setSelectedBusStop] = useState(null);
+
+  // Address search pin
+  const addressPinRef = useRef(null);
 
   // Debounced zoom listener
   useEffect(() => {
@@ -177,6 +184,31 @@ export default function MapView({ showBus, showMRT, selectedRoute, onRouteSelect
     const timer = setInterval(fetchCrowd, CROWD_REFRESH_INTERVAL);
     return () => clearInterval(timer);
   }, []);
+
+  // Address search pin: create/move/remove when selectedAddress changes
+  useEffect(() => {
+    if (!map) return;
+    // Remove existing pin
+    if (addressPinRef.current) {
+      addressPinRef.current.setMap(null);
+      addressPinRef.current = null;
+    }
+    if (selectedAddress) {
+      addressPinRef.current = new window.google.maps.Marker({
+        position: { lat: selectedAddress.lat, lng: selectedAddress.lng },
+        map,
+        title: selectedAddress.label,
+        zIndex: 100,
+        animation: window.google.maps.Animation.DROP,
+      });
+    }
+    return () => {
+      if (addressPinRef.current) {
+        addressPinRef.current.setMap(null);
+        addressPinRef.current = null;
+      }
+    };
+  }, [map, selectedAddress]);
 
   // Create a single reusable InfoWindow with "More Details" toggle support
   useEffect(() => {
@@ -359,8 +391,14 @@ export default function MapView({ showBus, showMRT, selectedRoute, onRouteSelect
       center={MAP_CENTER}
       zoom={MAP_ZOOM}
       options={mapOptions}
-      onLoad={(mapInstance) => setMap(mapInstance)}
+      onLoad={(mapInstance) => {
+        setMap(mapInstance);
+        if (onMapReady) onMapReady(mapInstance);
+      }}
     >
+      {/* GPS user location — always visible, requests permission automatically */}
+      {map && <UserLocationLayer map={map} />}
+
       {/* Bus stop layer — lazy loaded, always mounted once loaded */}
       {map && busStops.length > 0 && (
         <BusStopLayer
@@ -425,6 +463,7 @@ export default function MapView({ showBus, showMRT, selectedRoute, onRouteSelect
           busStopMap={busStopMap}
           onClear={() => onRouteSelect(null)}
           onBusStopClick={handleBusStopClick}
+          zoomLevel={zoomLevel}
         />
       )}
     </GoogleMap>

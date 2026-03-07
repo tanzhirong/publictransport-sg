@@ -83,6 +83,13 @@ export default function MRTStationLayer({
   useEffect(() => { onStationHoverRef.current = onStationHover; }, [onStationHover]);
   useEffect(() => { onStationHoverOutRef.current = onStationHoverOut; }, [onStationHoverOut]);
 
+  // Track showMarkers without adding it to the creation effect's deps.
+  // This effect runs on every render (no deps array) and is declared BEFORE the
+  // creation effect so React executes it first — ensuring the creation effect always
+  // reads the current visibility state when it initialises new markers.
+  const showMarkersRef = useRef(showMarkers);
+  useEffect(() => { showMarkersRef.current = showMarkers; });
+
   // Create markers + labels once when data arrives
   useEffect(() => {
     if (!map || !stationCentroids || !stationMapping) return;
@@ -100,11 +107,14 @@ export default function MRTStationLayer({
       const primaryColor = getStationPrimaryColor(codes);
       const position = new window.google.maps.LatLng(centroid.lat, centroid.lng);
 
-      // Main station marker (smaller dot, scale 5)
+      // Main station marker (smaller dot, scale 5).
+      // Use showMarkersRef (updated before this effect runs) so markers created
+      // while in Bus mode aren't placed on the map and then left visible because
+      // the showMarkers visibility effect below won't re-fire if the value hasn't changed.
       const marker = new window.google.maps.Marker({
         position: centroid,
         icon: getStationIcon(primaryColor),
-        map,
+        map: showMarkersRef.current ? map : null,
         zIndex: 100,
       });
       // Hover handlers instead of click
