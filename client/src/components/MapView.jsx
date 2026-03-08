@@ -111,6 +111,18 @@ export default function MapView({
     };
   }, [map]);
 
+  // Close bus stop InfoWindow on map background click.
+  // Marker clicks do NOT propagate to the map click event, so clicking a different
+  // stop opens a fresh popup without triggering this handler first.
+  useEffect(() => {
+    if (!map) return;
+    const listener = map.addListener('click', () => {
+      if (infoWindowRef.current) infoWindowRef.current.close();
+      setSelectedBusStop(null);
+    });
+    return () => window.google.maps.event.removeListener(listener);
+  }, [map]);
+
   // Load MRT data + station mapping on mount (NOT bus stops — lazy loaded)
   useEffect(() => {
     Promise.all([
